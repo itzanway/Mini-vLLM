@@ -1,0 +1,48 @@
+# ── Phase 5: docker-compose.yml ───────────────────────────────────────────────
+# Spins up the full stack: backend (GPU-enabled) + frontend (Nginx).
+# Usage:
+#   docker-compose up --build
+# GPU host (requires nvidia-container-toolkit):
+#   docker-compose --profile gpu up --build
+
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: minivllm-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persist HuggingFace model weights across container restarts
+      - hf_cache:/hf_cache
+    environment:
+      - HF_HOME=/hf_cache
+    # ── GPU support (comment out if CPU-only) ─────────────────────────────
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Point at the backend over the Docker internal network
+        VITE_API_URL: http://backend:8000
+    container_name: minivllm-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  hf_cache:
